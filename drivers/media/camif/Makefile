@@ -1,0 +1,8 @@
+
+obj-$(CONFIG_IMAP_ENCODE) += imapx200_cam.o
+
+EXTRA_CFLAGS += -DLINUX
+EXTRA_CFLAGS += -DDIVX_ENABLE
+
+
+

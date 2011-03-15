@@ -1,0 +1,14 @@
+# sololz
+# never forget super mountain callage
+
+menuconfig IMAP_ENCODE
+	bool "InfoTM IMAPX200 Encode Support"
+	select IMAP_MEMALLOC
+	default n
+	---help---
+	This is a driver for InfoTM IMAPX200 Encode, includes Video, JPEG
+
+config IMAP_ENCODE_DEBUG
+	bool "print Encode Driver debug messages"
+	depends on IMAP_ENCODE
+	default n

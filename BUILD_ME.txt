@@ -1,0 +1,2 @@
+make ARCH=arm CROSS_COMPILE=$HOME/src/cyanogenmod/prebuilt/linux-x86/toolchain/arm-eabi-4.4.0/bin/arm-eabi- -j8 zImage      
+mkimage -A arm -C none -O linux -T kernel -a 0x40008000 -e 0x40008000 -n 'linux-2.6.32.9' -d arch/arm/boot/zImage arch/arm/boot/uImage
