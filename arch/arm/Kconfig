@@ -204,7 +204,7 @@ config MMU
 
 choice
 	prompt "ARM system type"
-	default ARCH_VERSATILE
+	default ARCH_IMAP
 
 config ARCH_AAEC2000
 	bool "Agilent AAEC-2000 based"
@@ -702,6 +702,18 @@ config ARCH_BCMRING
 	help
 	  Support for Broadcom's BCMRing platform.
 
+config ARCH_IMAP
+        bool "Infotm IMAPX200"
+        select GENERIC_GPIO
+        select HAVE_CLK
+	select ARM_AMBA
+        help
+          Say Y here for systems based on one of the Infotm IMAP processers
+          such as imapx200 which is a powerful multimedia ARM processer.
+          Detailed info at <http://www.infotmic.com.cn>.
+
+
+
 endchoice
 
 source "arch/arm/mach-clps711x/Kconfig"
@@ -772,6 +784,10 @@ if ARCH_S5PC1XX
 source "arch/arm/mach-s5pc100/Kconfig"
 endif
 
+if ARCH_IMAP
+source "arch/arm/mach-imapx200/Kconfig"
+endif
+
 source "arch/arm/mach-lh7a40x/Kconfig"
 
 source "arch/arm/mach-h720x/Kconfig"
@@ -802,7 +818,7 @@ source "arch/arm/mach-u300/Kconfig"
 
 source "arch/arm/mach-w90x900/Kconfig"
 
-source "arch/arm/mach-bcmring/Kconfig"
+source "arch/arm/plat-imap/Kconfig"
 
 # Definitions to make life easier
 config ARCH_ACORN
@@ -1056,6 +1072,7 @@ config HZ
 	default 200 if ARCH_EBSA110 || ARCH_S3C2410
 	default OMAP_32K_TIMER_HZ if ARCH_OMAP && OMAP_32K_TIMER
 	default AT91_TIMER_HZ if ARCH_AT91
+	default 200 if ARCH_IMAP
 	default 100
 
 config THUMB2_KERNEL

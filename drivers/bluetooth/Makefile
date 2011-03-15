@@ -18,6 +18,8 @@ obj-$(CONFIG_BT_HCIBTSDIO)	+= btsdio.o
 obj-$(CONFIG_BT_MRVL)		+= btmrvl.o
 obj-$(CONFIG_BT_MRVL_SDIO)	+= btmrvl_sdio.o
 
+obj-$(CONFIG_BT_RDA5868_UART)	+= rda5868-bt.o
+
 btmrvl-y			:= btmrvl_main.o
 btmrvl-$(CONFIG_DEBUG_FS)	+= btmrvl_debugfs.o
 

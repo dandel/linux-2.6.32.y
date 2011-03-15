@@ -109,6 +109,24 @@ config RTC_INTF_DEV_UIE_EMUL
 	  clock several times per second, please enable this option
 	  only if you know that you really need it.
 
+config RTC_INTF_ALARM
+	bool "Android alarm driver"
+	depends on RTC_CLASS
+	default y
+	help
+	  Provides non-wakeup and rtc backed wakeup alarms based on rtc or
+	  elapsed realtime, and a non-wakeup alarm on the monotonic clock.
+	  Also provides an interface to set the wall time which must be used
+	  for elapsed realtime to work.
+
+config RTC_INTF_ALARM_DEV
+	bool "Android alarm device"
+	depends on RTC_INTF_ALARM
+	default y
+	help
+	  Exports the alarm interface to user-space.
+
+
 config RTC_DRV_TEST
 	tristate "Test driver/device"
 	help
@@ -598,6 +616,13 @@ config RTC_DRV_S3C
 
 	  This driver can also be build as a module. If so, the module
 	  will be called rtc-s3c.
+config RTC_DRV_IMAP
+	tristate "iMAPx200 RTC driver"
+	depends on ARCH_IMAP
+	help
+	  RTC driver for iMAPx200, besides normal clock, it also provides
+	  1 to 64Hz periodical interrupt, alarm interrupt & wake-up
+	  features.
 
 config RTC_DRV_EP93XX
 	tristate "Cirrus Logic EP93XX"

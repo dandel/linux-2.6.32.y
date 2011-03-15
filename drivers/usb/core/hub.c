@@ -2398,6 +2398,7 @@ static int hub_suspend(struct usb_interface *intf, pm_message_t msg)
 	unsigned		port1;
 
 	/* fail if children aren't already suspended */
+	/*
 	for (port1 = 1; port1 <= hdev->maxchild; port1++) {
 		struct usb_device	*udev;
 
@@ -2409,7 +2410,7 @@ static int hub_suspend(struct usb_interface *intf, pm_message_t msg)
 			return -EBUSY;
 		}
 	}
-
+*/
 	dev_dbg(&intf->dev, "%s\n", __func__);
 
 	/* stop khubd and related activity */

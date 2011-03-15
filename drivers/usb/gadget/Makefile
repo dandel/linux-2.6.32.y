@@ -15,6 +15,7 @@ obj-$(CONFIG_USB_GOKU)		+= goku_udc.o
 obj-$(CONFIG_USB_OMAP)		+= omap_udc.o
 obj-$(CONFIG_USB_LH7A40X)	+= lh7a40x_udc.o
 obj-$(CONFIG_USB_S3C2410)	+= s3c2410_udc.o
+obj-$(CONFIG_USB_IMAPX200)	+= ix200_udc.o
 obj-$(CONFIG_USB_AT91)		+= at91_udc.o
 obj-$(CONFIG_USB_ATMEL_USBA)	+= atmel_usba_udc.o
 obj-$(CONFIG_USB_FSL_USB2)	+= fsl_usb2_udc.o
@@ -51,4 +52,9 @@ obj-$(CONFIG_USB_G_SERIAL)	+= g_serial.o
 obj-$(CONFIG_USB_G_PRINTER)	+= g_printer.o
 obj-$(CONFIG_USB_MIDI_GADGET)	+= g_midi.o
 obj-$(CONFIG_USB_CDC_COMPOSITE) += g_cdc.o
+obj-$(CONFIG_USB_ANDROID)	+= android.o
+obj-$(CONFIG_USB_ANDROID_ACM)	+= f_acm.o u_serial.o
+obj-$(CONFIG_USB_ANDROID_ADB)	+= f_adb.o
+obj-$(CONFIG_USB_ANDROID_MASS_STORAGE)	+= f_mass_storage.o
+obj-$(CONFIG_USB_ANDROID_RNDIS)	+= f_rndis.o u_ether.o
 

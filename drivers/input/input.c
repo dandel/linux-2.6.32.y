@@ -26,6 +26,10 @@
 #include <linux/smp_lock.h>
 #include "input-compat.h"
 
+#ifdef CONFIG_FAKE_PM
+#include <plat/fake_pm.h>
+#endif
+
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_DESCRIPTION("Input core");
 MODULE_LICENSE("GPL");
@@ -309,7 +313,16 @@ void input_event(struct input_dev *dev,
 
 		spin_lock_irqsave(&dev->event_lock, flags);
 		add_input_randomness(type, code, value);
-		input_handle_event(dev, type, code, value);
+#ifdef	CONFIG_FAKE_PM
+		if(code == 116)
+			input_handle_event(dev, type, code, value);
+		else if(if_in_suspend == 0)
+		{
+#endif
+			input_handle_event(dev, type, code, value);
+#ifdef	CONFIG_FAKE_PM
+		}
+#endif
 		spin_unlock_irqrestore(&dev->event_lock, flags);
 	}
 }

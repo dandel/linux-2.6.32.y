@@ -115,6 +115,22 @@ source "drivers/media/video/Kconfig"
 source "drivers/media/radio/Kconfig"
 
 #
+# IMAPX200 Media Decode Driver. 
+#
+source "drivers/media/decode/Kconfig"
+
+#
+# IMAPX200 Media Encode Driver
+#
+source "drivers/media/encode/Kconfig"
+#
+# IMAPX200 Camera Interface Driver
+#
+source "drivers/media/camif/Kconfig"
+#
+#
+
+#
 # DVB adapters
 #
 

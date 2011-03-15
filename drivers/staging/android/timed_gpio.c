@@ -19,10 +19,16 @@
 #include <linux/hrtimer.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
+#include <linux/time.h>
+#include <plat/imapx.h>
+#include <asm/io.h>
 
 #include "timed_output.h"
 #include "timed_gpio.h"
 
+#ifdef CONFIG_FAKE_PM
+#include <plat/fake_pm.h>
+#endif
 
 struct timed_gpio_data {
 	struct timed_output_dev dev;
@@ -33,12 +39,66 @@ struct timed_gpio_data {
 	u8 		active_low;
 };
 
+static void gpio_output_direction(int direction)
+{
+	unsigned int temp;
+#ifdef CONFIG_FAKE_PM
+	if(if_in_suspend == 0)
+	{
+#endif
+#ifdef CONFIG_IMAP_PRODUCTION_P1011B
+		temp = __raw_readl(rGPOCON);
+		temp &= ~(0x3<<18);
+		temp |= 0x1<<18;
+		__raw_writel(temp, rGPOCON);
+
+		if(direction > 0)
+		{
+			temp = __raw_readl(rGPODAT);
+			temp |= 0x1<<9;
+			__raw_writel(temp, rGPODAT);	
+		}
+		else if(direction <= 0)
+		{
+			temp = __raw_readl(rGPODAT);
+			temp &= ~(0x1<<9);
+			__raw_writel(temp, rGPODAT);	
+		}
+#elif CONFIG_IMAP_PRODUCTION_P0811B
+		temp = __raw_readl(rGPECON);
+		temp &= ~(0x3<<6);
+		temp |= 0x1<<6;
+		__raw_writel(temp, rGPECON);
+
+		if(direction > 0)
+		{
+			temp = __raw_readl(rGPEDAT);
+			temp |= 0x1<<3;
+			__raw_writel(temp, rGPEDAT);	
+		}
+		else if(direction <= 0)
+		{
+			temp = __raw_readl(rGPEDAT);
+			temp &= ~(0x1<<3);
+			__raw_writel(temp, rGPEDAT);	
+		}
+#endif
+#ifdef CONFIG_FAKE_PM
+	}
+#endif
+}
+
+struct timeval time_start;
+struct timeval time_end;
+__kernel_time_t time;
+
 static enum hrtimer_restart gpio_timer_func(struct hrtimer *timer)
 {
 	struct timed_gpio_data *data =
 		container_of(timer, struct timed_gpio_data, timer);
 
-	gpio_direction_output(data->gpio, data->active_low ? 1 : 0);
+	//	gpio_direction_output(data->gpio, data->active_low ? 1 : 0);
+	gpio_output_direction(data->active_low ? 1 : 0);
 	return HRTIMER_NORESTART;
 }
 
@@ -65,15 +125,16 @@ static void gpio_enable(struct timed_output_dev *dev, int value)
 
 	/* cancel previous timer and set GPIO according to value */
 	hrtimer_cancel(&data->timer);
-	gpio_direction_output(data->gpio, data->active_low ? !value : !!value);
-
+	//	gpio_direction_output(data->gpio, data->active_low ? !value : !!value);
+	gpio_output_direction(data->active_low ? !value : !!value);
 	if (value > 0) {
 		if (value > data->max_timeout)
 			value = data->max_timeout;
 
 		hrtimer_start(&data->timer,
-			ktime_set(value / 1000, (value % 1000) * 1000000),
-			HRTIMER_MODE_REL);
+				ktime_set(value /1000, (value % 1000) * 1000000),
+				HRTIMER_MODE_REL);
+
 	}
 
 	spin_unlock_irqrestore(&data->lock, flags);
@@ -107,17 +168,32 @@ static int timed_gpio_probe(struct platform_device *pdev)
 		gpio_dat->dev.get_time = gpio_get_time;
 		gpio_dat->dev.enable = gpio_enable;
 		ret = timed_output_dev_register(&gpio_dat->dev);
+		if (ret < 0)
+		{
+			gpio_free(cur_gpio->gpio);
+		}
+
+/*		
+		ret = gpio_request(cur_gpio->gpio, cur_gpio->name);
+		if (ret >= 0) {
+			ret = timed_output_dev_register(&gpio_dat->dev);
+			if (ret < 0)
+				gpio_free(cur_gpio->gpio);
+		}
 		if (ret < 0) {
-			for (j = 0; j < i; j++)
+			for (j = 0; j < i; j++) {
 				timed_output_dev_unregister(&gpio_data[i].dev);
+				gpio_free(gpio_data[i].gpio);
+			}
 			kfree(gpio_data);
 			return ret;
 		}
-
+*/
 		gpio_dat->gpio = cur_gpio->gpio;
 		gpio_dat->max_timeout = cur_gpio->max_timeout;
 		gpio_dat->active_low = cur_gpio->active_low;
-		gpio_direction_output(gpio_dat->gpio, gpio_dat->active_low);
+//		gpio_direction_output(gpio_dat->gpio, gpio_dat->active_low);
+		gpio_output_direction(gpio_dat->active_low);
 	}
 
 	platform_set_drvdata(pdev, gpio_data);
@@ -131,8 +207,10 @@ static int timed_gpio_remove(struct platform_device *pdev)
 	struct timed_gpio_data *gpio_data = platform_get_drvdata(pdev);
 	int i;
 
-	for (i = 0; i < pdata->num_gpios; i++)
+	for (i = 0; i < pdata->num_gpios; i++) {
 		timed_output_dev_unregister(&gpio_data[i].dev);
+		gpio_free(gpio_data[i].gpio);
+	}
 
 	kfree(gpio_data);
 

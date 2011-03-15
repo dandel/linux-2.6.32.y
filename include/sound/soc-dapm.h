@@ -276,7 +276,9 @@ int snd_soc_dapm_new_controls(struct snd_soc_codec *codec,
 	const struct snd_soc_dapm_widget *widget,
 	int num);
 
-/* dapm path setup */
+/* dapm path setup*/
+  int   snd_soc_dapm_connect_input(struct snd_soc_codec *codec,
+	const char *sink_name, const char *control_name, const char *src_name); 
 int snd_soc_dapm_new_widgets(struct snd_soc_codec *codec);
 void snd_soc_dapm_free(struct snd_soc_device *socdev);
 int snd_soc_dapm_add_routes(struct snd_soc_codec *codec,

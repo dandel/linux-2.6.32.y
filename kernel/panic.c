@@ -22,15 +22,30 @@
 #include <linux/init.h>
 #include <linux/nmi.h>
 #include <linux/dmi.h>
+#if defined(CONFIG_FBCON_DRAW_PANIC_TEXT)
+#include <linux/fb.h>
+#endif
+
+#include <mach/imapx_gpio.h>
+#include <asm/io.h>
+#if defined(CONFIG_FBCON_DRAW_PANIC_TEXT)
+static int kpanic_in_progress=0;
+#endif
 
 int panic_on_oops;
 static unsigned long tainted_mask;
 static int pause_on_oops;
 static int pause_on_oops_flag;
 static DEFINE_SPINLOCK(pause_on_oops_lock);
-
-int panic_timeout;
-
+#ifndef CONFIG_PANIC_TIMEOUT
+#define CONFIG_PANIC_TIMEOUT 0
+#endif
+int panic_timeout = CONFIG_PANIC_TIMEOUT;
+/*
+#if defined(CONFIG_FBCON_DRAW_PANIC_TEXT)
+extern int fbcon_draw_panic_text(struct fb_info *,const char *, size_t , int ,int );
+#endif
+*/
 ATOMIC_NOTIFIER_HEAD(panic_notifier_list);
 
 EXPORT_SYMBOL(panic_notifier_list);
@@ -69,7 +84,11 @@ NORET_TYPE void panic(const char * fmt, ...)
 	va_start(args, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
-	printk(KERN_EMERG "Kernel panic - not syncing: %s\n",buf);
+	printk("xmj\n");
+	printk(KERN_EMERG "xmjxmj\n");
+	//i = __raw_readl();
+	//printk(KERN_EMERG "INTPEND is %x\n", r);
+	printk(KERN_EMERG "Kernel panic - not syncing1111111111: %s\n",buf);
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	dump_stack();
 #endif
@@ -87,6 +106,14 @@ NORET_TYPE void panic(const char * fmt, ...)
 	 * situation.
 	 */
 	smp_send_stop();
+
+#if defined(CONFIG_FBCON_DRAW_PANIC_TEXT)
+	if(!kpanic_in_progress)
+	{
+		kpanic_in_progress=1;
+		//fbcon_draw_panic_text(NULL,"AP kernel panic!",strlen("AP kernel panic!"),1,0);
+	}
+#endif
 
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
 

@@ -5,6 +5,8 @@
  *
  * It's OK if the min/max values are zero.
  */
+#ifndef ADS7846_H
+#define ADS7846_H
 enum ads7846_filter {
 	ADS7846_FILTER_OK,
 	ADS7846_FILTER_REPEAT,
@@ -54,4 +56,5 @@ struct ads7846_platform_data {
 	void	(*filter_cleanup)(void *filter_data);
 	void	(*wait_for_sync)(void);
 };
-
+extern int battery_val;
+#endif

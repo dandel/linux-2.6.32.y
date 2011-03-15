@@ -244,6 +244,24 @@ static int ehci_bus_resume (struct usb_hcd *hcd)
 	u32			power_okay;
 	int			i;
 	u8			resume_needed = 0;
+	//printk("********ehci_bus_resume!\n");
+	/****************************************************/
+	int valTmp;
+	valTmp = __raw_readl(rPAD_CFG);
+	valTmp &= ~0xe;
+	__raw_writel(valTmp, rPAD_CFG);
+	__raw_writel(0x0, rUSB_SRST);
+	for(i=0;i<6000;i++);
+	valTmp = __raw_readl(rPAD_CFG);
+	valTmp |= 0xe;
+	__raw_writel(valTmp,rPAD_CFG);
+	mdelay(4);
+	__raw_writel(0x5,rUSB_SRST);
+	for(i=0;i<1000;i++);
+	__raw_writel(0xf,rUSB_SRST);
+
+
+/*****************************************************/
 
 	if (time_before (jiffies, ehci->next_statechange))
 		msleep(5);
@@ -283,11 +301,20 @@ static int ehci_bus_resume (struct usb_hcd *hcd)
 	/* restore CMD_RUN, framelist size, and irq threshold */
 	ehci_writel(ehci, ehci->command, &ehci->regs->command);
 
+	ehci_writel(ehci, FLAG_CF, &ehci->regs->configured_flag);
 	/* Some controller/firmware combinations need a delay during which
 	 * they set up the port statuses.  See Bugzilla #8190. */
 	spin_unlock_irq(&ehci->lock);
 	msleep(8);
 	spin_lock_irq(&ehci->lock);
+	
+	i = HCS_N_PORTS (ehci->hcs_params);
+	while (i--) {
+		temp = ehci_readl(ehci, &ehci->regs->port_status [i]);
+		temp |= PORT_POWER;
+		ehci_writel(ehci, temp, &ehci->regs->port_status [i]);
+	}
+
 
 	/* manually resume the ports we suspended during bus_suspend() */
 	i = HCS_N_PORTS (ehci->hcs_params);

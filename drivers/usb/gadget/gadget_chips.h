@@ -98,6 +98,12 @@
 #define gadget_is_atmel_usba(g)	0
 #endif
 
+#ifdef CONFIG_USB_GADGET_IMAPX200
+#define gadget_is_imapx200(g)	!strcmp("iMAPx200-UDC", (g)->name)
+#else
+#define gadget_is_imapx200(g)	0
+#endif
+
 #ifdef CONFIG_USB_GADGET_S3C2410
 #define gadget_is_s3c2410(g)    !strcmp("s3c2410_udc", (g)->name)
 #else
@@ -247,6 +253,8 @@ static inline int usb_gadget_controller_number(struct usb_gadget *gadget)
 		return 0x24;
 	else if (gadget_is_r8a66597(gadget))
 		return 0x25;
+	else if (gadget_is_imapx200(gadget))
+		return 0x26;
 	return -ENOENT;
 }
 

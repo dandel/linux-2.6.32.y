@@ -203,7 +203,7 @@ static int snd_pcm_update_hw_ptr_post(struct snd_pcm_substream *substream,
 			return -EPIPE;
 		}
 	} else {
-		if (avail >= runtime->stop_threshold) {
+		if (avail >= (runtime->stop_threshold*2)) {
 			xrun(substream);
 			return -EPIPE;
 		}

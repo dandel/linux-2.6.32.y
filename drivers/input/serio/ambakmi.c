@@ -72,15 +72,26 @@ static int amba_kmi_open(struct serio *io)
 	unsigned int divisor;
 	int ret;
 
-	ret = clk_enable(kmi->clk);
-	if (ret)
+	int gpccon;
+	
+//	ret = clk_enable(kmi->clk);
+//	if (ret)
+	ret = readb(KMICR);//add by zhaojun
+	if (ret & KMICR_EN)//add by zhaojun
 		goto out;
 
-	divisor = clk_get_rate(kmi->clk) / 8000000 - 1;
+//	divisor = clk_get_rate(kmi->clk) / 8000000 - 1;
+	divisor = 0xf;//add by zhaojun
 	writeb(divisor, KMICLKDIV);
 	writeb(KMICR_EN, KMICR);
 
-	ret = request_irq(kmi->irq, amba_kmi_int, 0, "kmi-pl050", kmi);
+//set gpc to pic function add by zhaojun
+	gpccon = readl(rGPCCON);
+	gpccon &= ~(0x3<<8 | 0x3<<10 | 0x3<<12 | 0x3<<14);
+	gpccon |= (0x2<<8 | 0x2<<10 | 0x2<<12 | 0x2<<14);
+	writel(gpccon,rGPCCON);
+
+	ret = request_irq(kmi->irq, amba_kmi_int, IRQF_DISABLED, "kmi-pl050", kmi);
 	if (ret) {
 		printk(KERN_ERR "kmi: failed to claim IRQ%d\n", kmi->irq);
 		writeb(0, KMICR);
@@ -141,11 +152,10 @@ static int amba_kmi_probe(struct amba_device *dev, struct amba_id *id)
 		goto out;
 	}
 
-	kmi->clk = clk_get(&dev->dev, "KMIREFCLK");
-	if (IS_ERR(kmi->clk)) {
-		ret = PTR_ERR(kmi->clk);
-		goto unmap;
-	}
+//	if (IS_ERR(kmi->clk)) {
+//		ret = PTR_ERR(kmi->clk);
+//		goto unmap;
+//	}
 
 	kmi->irq = dev->irq[0];
 	amba_set_drvdata(dev, kmi);
@@ -153,8 +163,8 @@ static int amba_kmi_probe(struct amba_device *dev, struct amba_id *id)
 	serio_register_port(kmi->io);
 	return 0;
 
- unmap:
-	iounmap(kmi->base);
+//unmap:
+//	iounmap(kmi->base);
  out:
 	kfree(kmi);
 	kfree(io);

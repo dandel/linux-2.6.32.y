@@ -176,8 +176,8 @@
 /* Qualcomm MSM SoCs */
 #define PORT_MSM	88
 
-/* BCM63xx family SoCs */
-#define PORT_BCM63XX	89
+/* IMAP-X200 */
+#define PORT_IMAPX200   89
 
 #ifdef __KERNEL__
 
@@ -217,6 +217,7 @@ struct uart_ops {
 	void		(*pm)(struct uart_port *, unsigned int state,
 			      unsigned int oldstate);
 	int		(*set_wake)(struct uart_port *, unsigned int state);
+	void		(*wake_peer)(struct uart_port *);
 
 	/*
 	 * Return a string describing the type of the port

@@ -1,5 +1,12 @@
 # drivers/mtd/nand/Kconfig
 
+config MTD_NAND_IDS
+	tristate "Include chip ids for known NAND devices."
+	depends on MTD
+	help
+	  Useful for NAND drivers that do not use the NAND subsystem but
+	  still like to take advantage of the known chip information.
+
 menuconfig MTD_NAND
 	tristate "NAND Device Support"
 	depends on MTD
@@ -102,9 +109,6 @@ config MTD_NAND_TS7250
 	depends on MACH_TS72XX
 	help
 	  Support for NAND flash on Technologic Systems TS-7250 platform.
-
-config MTD_NAND_IDS
-	tristate
 
 config MTD_NAND_AU1550
 	tristate "Au1550/1200 NAND support"
@@ -474,6 +478,78 @@ config MTD_NAND_SOCRATES
 	depends on MTD_NAND && SOCRATES
 	help
 	  Enables support for NAND Flash chips wired onto Socrates board.
+
+config MTD_NAND_IMAPX200
+	tristate "NAND Driver for iMAPx200"
+	depends on MTD_NAND && ARCH_IMAP
+	help
+	  MTD based driver for iMAPx200 processor.
+
+config MTD_NAND_IMAPX200_BUSW16
+	bool "NAND chip bus width 16bits"
+	depends on MTD_NAND_IMAPX200
+	help
+	  Say Y here if the I/O width of NAND chip is 16 bit.
+
+config MTD_NAND_IMAPX200_NEW
+	bool "New NAND added in old museum"
+	depends on MTD_NAND_IMAPX200
+	help
+	  Say Y here to compile new NAND device added in the
+	  old museum.
+
+config MTD_NAND_IMAPX200_OOBECC
+	bool "Use spare ECC"
+	depends on MTD_NAND_IMAPX200
+	help
+	  Say Y to check spare area ECC code, this will slightly decrease
+	  the performence.
+
+choice
+	prompt "NAND cell type"
+	depends on MTD_NAND_IMAPX200
+	help
+	  Select NAND flash cell type.
+
+config MTD_NAND_IMAPX200_SLC
+	bool "Cell type is SLC"
+	depends on MTD_NAND_IMAPX200
+	help
+	  If this is select, eccsize(the maxmum size for hardware to produce
+	  ECC code) will be configured as 2048 bytes, eccbytes will be confi-
+	  gured as 12 bytes(that 12 bytes in spare area will be reserved is
+	  to store ECC code per 2048 bytes).
+
+config MTD_NAND_IMAPX200_MLC
+	bool "Cell type is MLC"
+	depends on MTD_NAND_IMAPX200
+	help
+	  If this is select, eccsize(the maxmum size for hardware to produce
+	  ECC code) will be configured as 512 bytes, eccbytes will be confi-
+	  gured as 12 bytes(that is 12 bytes in spare area will be reserved
+	  to store ECC code per 512 bytes).
+
+endchoice
+
+choice
+	prompt "NAND transfer method"
+	depends on MTD_NAND_IMAPX200
+
+config MTD_NAND_IMAPX200_POLL
+	bool "CPU polling"
+	depends on MTD_NAND_IMAPX200
+
+config MTD_NAND_IMAPX200_SDMA
+	bool "Simple DMA transfer"
+	depends on MTD_NAND_IMAPX200
+
+config MTD_NAND_IMAPX200_ADMA
+	bool "Advanced DMA transfer"
+	depends on MTD_NAND_IMAPX200
+	help
+	  Not supported currently.
+
+endchoice
 
 config MTD_NAND_W90P910
 	tristate "Support for NAND on w90p910 evaluation board."

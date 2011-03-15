@@ -1006,6 +1006,11 @@ MODULE_LICENSE ("GPL");
 #define PLATFORM_DRIVER		ohci_hcd_s3c2410_driver
 #endif
 
+#if defined(CONFIG_ARCH_IMAP)
+#include "ohci-imap.c"
+#define PLATFORM_DRIVER		ohci_hcd_imapx200_driver
+#endif
+
 #ifdef CONFIG_ARCH_OMAP
 #include "ohci-omap.c"
 #define PLATFORM_DRIVER		ohci_hcd_omap_driver

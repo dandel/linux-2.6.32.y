@@ -180,8 +180,12 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 # Default value for CROSS_COMPILE is not to prefix executables
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 export KBUILD_BUILDHOST := $(SUBARCH)
-ARCH		?= $(SUBARCH)
-CROSS_COMPILE	?=
+ARCH		:= arm
+#CROSS_COMPILE = /home/infotm/infotm/tool-chain/toolchain_infotm_1.2.2/bin/arm-infotm-linux-gnueabi-
+#CROSS_COMPILE = /home/zhjun/extension/toolchain_infotm_1.2.2/bin/arm-infotm-linux-gnueabi-
+#CROSS_COMPILE = /home/zhjun/extension/toolchain_infotm_1.2.2/bin/arm-infotm-linux-gnueabi-
+#CROSS_COMPILE	= /usr/local/arm/result/bin/arm-zhjun-linux-gnueabi- 
+CROSS_COMPILE	= /home/infotm-sqa/android_release/android-2.1_r2-external-release/prebuilt/linux-x86/toolchain/arm-eabi-4.4.0/bin/arm-eabi-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)

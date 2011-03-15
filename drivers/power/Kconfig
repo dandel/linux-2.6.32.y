@@ -110,4 +110,28 @@ config CHARGER_PCF50633
 	help
 	 Say Y to include support for NXP PCF50633 Main Battery Charger.
 
+config ANDROID_FAKE_BATTERY
+	tristate "Android Fake Battery for p1011b"
+	help
+	 Say Y to include support for android fake battery.
+
+config ANDROID_FAKE_BATTERY_P0811B
+	depends on IMAP_PRODUCTION_P0811B
+	tristate "Android Fake Battery for p0811b"
+	help
+	 Say Y to include support for android fake battery.
+
+
+config IMAPX_BATTERY
+	tristate "iMAPx200 battery driver"
+	help
+	 Say Y to include support for iMAPx200 battery.
+
+config IMAPX_ADC_PRODUCT 
+	bool "Using Product gpio to config ADC"
+	depends on IMAPX_BATTERY
+	default y
+	help
+	  Say Y here if you are using product board.
+
 endif # POWER_SUPPLY

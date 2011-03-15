@@ -533,12 +533,37 @@ config SERIAL_S3C6400
 	  Serial port support for the Samsung S3C6400 and S3C6410
 	  SoCs
 
-config SERIAL_S5PC100
-	tristate "Samsung S5PC100 Serial port support"
-	depends on SERIAL_SAMSUNG && CPU_S5PC100
-	default y
-	help
-	  Serial port support for the Samsung S5PC100 SoCs
+config SERIAL_IMAP
+        tristate "IMAP SoC serial support"
+        depends on ARM && PLAT_IMAP
+        select SERIAL_CORE
+        help
+          Support for the on-chip UARTs on the IMAP series CPUs, providing
+	  /dev/ttySAC0, 1, 2 and 3 (note, some machines may not provide all
+	  of these ports, depending on how the serial port pins are configured.
+
+config SERIAL_IMAP_DEBUG
+        bool "IMAP SoC serial debug"
+        depends on SERIAL_IMAP && DEBUG_LL
+        help
+          Add support for debugging the serial driver. Since this is generally
+	  being used as a console, we use our own output routines that go via
+	  the low-level debug printascii() function.
+
+config SERIAL_IMAP_CONSOLE
+        bool "Support for console on IMAP SoC serial port"
+        depends on SERIAL_IMAP=y
+        select SERIAL_CORE_CONSOLE
+        help
+          Allow selection of the IMAP on-board serial ports for use as an
+	  virtual console.
+
+          Even if you say Y here, the currently visible virtual console
+          (/dev/tty0) will still be used as the system console by default, but
+          you can alter that using a kernel command line option such as
+          "console=ttySACx". (Try "man bootparam" or see the documentation of
+          your boot loader about how to pass options to the kernel at boot time.)
+
 
 config SERIAL_MAX3100
 	tristate "MAX3100 support"

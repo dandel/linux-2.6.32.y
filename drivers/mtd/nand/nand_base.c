@@ -52,6 +52,10 @@
 #include <linux/mtd/partitions.h>
 #endif
 
+#ifdef CONFIG_PANIC_DUMP
+extern int is_kpanic_running(void);
+#endif
+
 /* Define default oob placement schemes for large and small page devices */
 static struct nand_ecclayout nand_oob_8 = {
 	.eccbytes = 3,
@@ -79,7 +83,7 @@ static struct nand_ecclayout nand_oob_64 = {
 		   56, 57, 58, 59, 60, 61, 62, 63},
 	.oobfree = {
 		{.offset = 2,
-		 .length = 38}}
+		 .length = 25}}
 };
 
 static struct nand_ecclayout nand_oob_128 = {
@@ -93,7 +97,21 @@ static struct nand_ecclayout nand_oob_128 = {
 		   120, 121, 122, 123, 124, 125, 126, 127},
 	.oobfree = {
 		{.offset = 2,
-		 .length = 78}}
+		 .length = 32}}
+};
+
+static struct nand_ecclayout nand_oob_436 = {
+	.eccbytes = 48,
+	.eccpos = {
+		    80,  81,  82,  83,  84,  85,  86,  87,
+		    88,  89,  90,  91,  92,  93,  94,  95,
+		    96,  97,  98,  99, 100, 101, 102, 103,
+		   104, 105, 106, 107, 108, 109, 110, 111,
+		   112, 113, 114, 115, 116, 117, 118, 119,
+		   120, 121, 122, 123, 124, 125, 126, 127},
+	.oobfree = {
+		{.offset = 2,
+		 .length = 32}}
 };
 
 static int nand_get_device(struct nand_chip *chip, struct mtd_info *mtd,
@@ -125,6 +143,10 @@ static void nand_release_device(struct mtd_info *mtd)
 	spin_lock(&chip->controller->lock);
 	chip->controller->active = NULL;
 	chip->state = FL_READY;
+#ifdef CONFIG_PANIC_DUMP
+	/* panic mode, don't schedule out */
+	if (!is_kpanic_running())
+#endif
 	wake_up(&chip->controller->wq);
 	spin_unlock(&chip->controller->lock);
 }
@@ -687,7 +709,14 @@ nand_get_device(struct nand_chip *chip, struct mtd_info *mtd, int new_state)
 	DECLARE_WAITQUEUE(wait, current);
  retry:
 	spin_lock(lock);
-
+#ifdef CONFIG_PANIC_DUMP
+ 	/* panic mode, get device anyway */
+ 	if (is_kpanic_running()) {
+ 		/* interrupt the current nand operation, reset the nand */
+ 		chip->controller->active = chip;
+ 		chip->state = FL_READY;
+ 	}
+ #endif
 	/* Hardware controller shared among independent devices */
 	if (!chip->controller->active)
 		chip->controller->active = chip;
@@ -748,6 +777,10 @@ static int nand_wait(struct mtd_info *mtd, struct nand_chip *chip)
 			if (chip->read_byte(mtd) & NAND_STATUS_READY)
 				break;
 		}
+#ifdef CONFIG_PANIC_DUMP
+		/* panic mode */
+		if (!is_kpanic_running())
+#endif
 		cond_resched();
 	}
 	led_trigger_event(nand_led_trigger, LED_OFF);
@@ -2548,7 +2581,8 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 		 */
 		mtd->erasesize = type->erasesize;
 		mtd->writesize = type->pagesize;
-		mtd->oobsize = mtd->writesize / 32;
+		mtd->oobsize = ((mtd->writesize ==  2048)?64:
+						((mtd->writesize ==  4096)?128:436));
 		busw = type->options & NAND_BUSWIDTH_16;
 	}
 
@@ -2672,6 +2706,44 @@ int nand_scan_ident(struct mtd_info *mtd, int maxchips)
 	return 0;
 }
 
+static void nand_panic_wait(struct mtd_info *mtd)
+{
+	struct nand_chip *chip = mtd->priv;
+	int i;
+
+	if (chip->state != FL_READY)
+		for (i = 0; i < 40; i++) {
+			if (chip->dev_ready(mtd))
+				break;
+			mdelay(10);
+		}
+	chip->state = FL_READY;
+}
+
+static int nand_panic_write(struct mtd_info *mtd, loff_t to, size_t len,
+			    size_t *retlen, const u_char *buf)
+{
+	struct nand_chip *chip = mtd->priv;
+	int ret;
+
+	/* Do not allow reads past end of device */
+	if ((to + len) > mtd->size)
+		return -EINVAL;
+	if (!len)
+		return 0;
+
+	nand_panic_wait(mtd);
+
+	chip->ops.len = len;
+	chip->ops.datbuf = (uint8_t *)buf;
+	chip->ops.oobbuf = NULL;
+
+	ret = nand_do_write_ops(mtd, to, &chip->ops);
+
+	*retlen = chip->ops.retlen;
+	return ret;
+}
+
 
 /**
  * nand_scan_tail - [NAND Interface] Scan for the NAND device
@@ -2710,6 +2782,9 @@ int nand_scan_tail(struct mtd_info *mtd)
 			break;
 		case 128:
 			chip->ecc.layout = &nand_oob_128;
+			break;
+		case 436:
+			chip->ecc.layout = &nand_oob_436;
 			break;
 		default:
 			printk(KERN_WARNING "No oob scheme defined for "
@@ -2879,6 +2954,7 @@ int nand_scan_tail(struct mtd_info *mtd)
 	mtd->write = nand_write;
 	mtd->read_oob = nand_read_oob;
 	mtd->write_oob = nand_write_oob;
+	mtd->panic_write = nand_panic_write;
 	mtd->sync = nand_sync;
 	mtd->lock = NULL;
 	mtd->unlock = NULL;

@@ -10,7 +10,7 @@ obj-$(CONFIG_LCD_PLATFORM)	   += platform_lcd.o
 obj-$(CONFIG_LCD_VGG2432A4)	   += vgg2432a4.o
 obj-$(CONFIG_LCD_TDO24M)	   += tdo24m.o
 obj-$(CONFIG_LCD_TOSA)		   += tosa_lcd.o
-
+obj-$(CONFIG_CPU_IMAPX200) += imapx200_bl.o
 obj-$(CONFIG_BACKLIGHT_CLASS_DEVICE) += backlight.o
 obj-$(CONFIG_BACKLIGHT_ATMEL_PWM)    += atmel-pwm-bl.o
 obj-$(CONFIG_BACKLIGHT_GENERIC)	+= generic_bl.o

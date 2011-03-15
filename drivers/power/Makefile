@@ -29,3 +29,6 @@ obj-$(CONFIG_BATTERY_BQ27x00)	+= bq27x00_battery.o
 obj-$(CONFIG_BATTERY_DA9030)	+= da9030_battery.o
 obj-$(CONFIG_BATTERY_MAX17040)	+= max17040_battery.o
 obj-$(CONFIG_CHARGER_PCF50633)	+= pcf50633-charger.o
+obj-$(CONFIG_ANDROID_FAKE_BATTERY)  += android_fake_battery.o
+obj-$(CONFIG_ANDROID_FAKE_BATTERY_P0811B)  += android_fake_battery_p0811b.o
+obj-$(CONFIG_IMAPX_BATTERY)  += imapx200_battery.o

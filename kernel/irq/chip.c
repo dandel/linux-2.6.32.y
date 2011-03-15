@@ -472,7 +472,10 @@ handle_level_irq(unsigned int irq, struct irq_desc *desc)
 	 */
 	action = desc->action;
 	if (unlikely(!action || (desc->status & IRQ_DISABLED)))
+	{
+		printk(KERN_ERR "IRQ %d enter bad status!\n", irq);
 		goto out_unlock;
+	}
 
 	desc->status |= IRQ_INPROGRESS;
 	spin_unlock(&desc->lock);

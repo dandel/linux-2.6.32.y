@@ -1186,6 +1186,7 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 	unsigned int the_result;
 	struct scsi_sense_hdr sshdr;
 	int sense_valid = 0;
+	unsigned int two_result;
 
 	spintime = 0;
 
@@ -1193,16 +1194,21 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 	/* Spinup needs to be done for module loads too. */
 	do {
 		retries = 0;
-
+	
 		do {
 			cmd[0] = TEST_UNIT_READY;
 			memset((void *) &cmd[1], 0, 9);
-
-			the_result = scsi_execute_req(sdkp->device, cmd,
+			two_result = 0;
+			do {
+				msleep(100);
+				the_result = scsi_execute_req(sdkp->device, cmd,
 						      DMA_NONE, NULL, 0,
 						      &sshdr, SD_TIMEOUT,
 						      SD_MAX_RETRIES, NULL);
 
+				two_result++;
+			}
+			while(two_result<100 && the_result!=0);
 			/*
 			 * If the drive has indicated to us that it
 			 * doesn't have any media in it, don't bother
@@ -1228,7 +1234,7 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 			}
 			break;
 		}
-					
+
 		/*
 		 * The device does not want the automatic start to be issued.
 		 */

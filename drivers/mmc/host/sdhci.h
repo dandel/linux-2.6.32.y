@@ -143,7 +143,7 @@
 #define  SDHCI_CAN_DO_ADMA2	0x00080000
 #define  SDHCI_CAN_DO_ADMA1	0x00100000
 #define  SDHCI_CAN_DO_HISPD	0x00200000
-#define  SDHCI_CAN_DO_SDMA	0x00400000
+#define  SDHCI_CAN_DO_DMA	0x00400000
 #define  SDHCI_CAN_VDD_330	0x01000000
 #define  SDHCI_CAN_VDD_300	0x02000000
 #define  SDHCI_CAN_VDD_180	0x04000000
@@ -177,6 +177,11 @@
 #define   SDHCI_SPEC_200	1
 
 struct sdhci_ops;
+struct descripter {
+	u16    attr;
+	u16    len;
+	u32    addr;
+};
 
 struct sdhci_host {
 	/* Data set by hardware interface driver */
@@ -232,8 +237,6 @@ struct sdhci_host {
 #define SDHCI_QUIRK_FORCE_1_BIT_DATA			(1<<22)
 /* Controller needs 10ms delay between applying power and clock */
 #define SDHCI_QUIRK_DELAY_AFTER_POWER			(1<<23)
-/* Controller uses SDCLK instead of TMCLK for data timeouts */
-#define SDHCI_QUIRK_DATA_TIMEOUT_USES_SDCLK		(1<<24)
 
 	int			irq;		/* Device IRQ */
 	void __iomem *		ioaddr;		/* Mapped address */
@@ -252,7 +255,7 @@ struct sdhci_host {
 	spinlock_t		lock;		/* Mutex */
 
 	int			flags;		/* Host attributes */
-#define SDHCI_USE_SDMA		(1<<0)		/* Host is SDMA capable */
+#define SDHCI_USE_DMA		(1<<0)		/* Host is DMA capable */
 #define SDHCI_USE_ADMA		(1<<1)		/* Host is ADMA capable */
 #define SDHCI_REQ_USE_DMA	(1<<2)		/* Use DMA for this req. */
 #define SDHCI_DEVICE_DEAD	(1<<3)		/* Device unresponsive */
@@ -275,7 +278,7 @@ struct sdhci_host {
 
 	int			sg_count;	/* Mapped sg entries */
 
-	u8			*adma_desc;	/* ADMA descriptor table */
+	struct descripter			*adma_desc;	/* ADMA descriptor table */
 	u8			*align_buffer;	/* Bounce buffer */
 
 	dma_addr_t		adma_addr;	/* Mapped ADMA descr. table */
@@ -301,6 +304,7 @@ struct sdhci_ops {
 #endif
 
 	void	(*set_clock)(struct sdhci_host *host, unsigned int clock);
+	void	(*set_clk_src)(struct sdhci_host *host);
 
 	int		(*enable_dma)(struct sdhci_host *host);
 	unsigned int	(*get_max_clock)(struct sdhci_host *host);

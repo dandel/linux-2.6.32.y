@@ -244,6 +244,13 @@ config SPI_XILINX
 	  See the "OPB Serial Peripheral Interface (SPI) (v1.00e)"
 	  Product Specification document (DS464) for hardware details.
 
+config SPI_IMAPX200
+	tristate "Imapx200 series SPI"
+	depends on ARCH_IMAP
+	help
+	  SPI driver for Imapx200 series ARM SoCs
+
+
 #
 # Add new SPI master controllers in alphabetical order above this line
 #

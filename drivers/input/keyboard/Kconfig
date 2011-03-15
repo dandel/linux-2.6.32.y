@@ -413,14 +413,20 @@ config KEYBOARD_XTKBD
 	  To compile this driver as a module, choose M here: the
 	  module will be called xtkbd.
 
-config KEYBOARD_W90P910
-	tristate "W90P910 Matrix Keypad support"
-	depends on ARCH_W90X900
-	help
-	  Say Y here to enable the matrix keypad on evaluation board
-	  based on W90P910.
+config KEYBOARD_IMAPX200
+	tristate "IMAPX200 keyboard"
+        help
+          Say Y here if you want to use the IMAPX200 keyboard 
+	  on your system.
 
-	  To compile this driver as a module, choose M here: the
-	  module will be called w90p910_keypad.
+          To compile this driver as a module, choose M here: the
+          module will be called xtkbd.
+
+config MATRIXKEY_FOR_PRODUCT
+	bool "Using Keyboard for Product Board"
+	depends on KEYBOARD_IMAPX200
+	default n
+	help
+	  Say Y here if you are using product board.
 
 endif

@@ -1,4 +1,5 @@
 /*
+ *
  * ADS7846 based touchscreen and sensor driver
  *
  * Copyright (c) 2005 David Brownell
@@ -29,7 +30,10 @@
 #include <linux/spi/ads7846.h>
 #include <asm/irq.h>
 
+#include <mach/imapx_gpio.h>
+#include <asm/io.h>
 
+//#undef CONFIG_IMAP_PRODUCTION
 /*
  * This code has been heavily tested on a Nokia 770, and lightly
  * tested on other ads7846 devices (OSK/Mistral, Lubbock).
@@ -51,9 +55,77 @@
  * files.
  */
 
-#define TS_POLL_DELAY	(1 * 1000000)	/* ns delay before the first sample */
-#define TS_POLL_PERIOD	(5 * 1000000)	/* ns delay between samples */
+/*********************************************************
+ * touchscreen calibration by zhaojun
+ */
+struct ts_sample {
+	int             x;
+	int             y;
+	unsigned int    pressure;
+};    
 
+struct ts_variance {
+	int delta;
+	struct ts_sample cur;
+	struct ts_sample last;
+	struct ts_sample noise;
+	unsigned int flags;
+#define VAR_PENDOWN             0x00000001
+#define VAR_LASTVALID           0x00000002
+#define VAR_NOISEVALID          0x00000004
+#define VAR_SUBMITNOISE         0x00000008
+};
+struct ts_variance variance;
+
+#define VAR_REPORT_NULL		0x0
+#define VAR_REPORT_LAST		0x1
+#define VAR_REPORT_NOISE_LAST	0x2
+
+#define DEJ_REPORT_NULL		0x0
+#define DEJ_REPORT_DATA		0x1
+
+#define NR_SAMPHISTLEN  4
+static const unsigned char weight [NR_SAMPHISTLEN - 1][NR_SAMPHISTLEN + 1] =
+{
+	/* The last element is pow2(SUM(0..3)) */
+	{ 5, 3, 0, 0, 3 },      /* When we have 2 samples ... */
+	{ 8, 5, 3, 0, 4 },      /* When we have 3 samples ... */
+	{ 6, 4, 3, 3, 4 },      /* When we have 4 samples ... */
+};
+
+struct ts_hist {
+	int x;
+	int y;
+	unsigned int p;
+};
+
+struct ts_dejitter {
+	int delta;
+	int x;
+	int y;
+	int down;
+	int nr;
+	int head;
+	struct ts_sample cur;
+	struct ts_hist hist[NR_SAMPHISTLEN];
+};
+struct ts_dejitter dejitter;
+
+static int sqr (int x)
+{
+	return x * x;
+}
+
+
+/*
+ * touchscreen calibration by zhaojun end
+ **********************************************************/
+
+//#define TS_POLL_DELAY	(20 * 1000000)	/* ns delay before the first sample */
+#define TS_POLL_DELAY	(50 * 1000000)	/* ns delay before the first sample */
+//#define TS_POLL_PERIOD	(5 * 1000000)	/* ns delay between samples */
+#define TS_POLL_PERIOD	(20 * 1000000)	/* ns delay between samples */
+//#define TS_POLL_PERIOD	(50 * 1000000)	/* ns delay between samples */
 /* this driver doesn't aim at the peak continuous sample rate */
 #define	SAMPLE_BITS	(8 /*cmd*/ + 16 /*sample*/ + 2 /* before, after */)
 
@@ -66,6 +138,9 @@ struct ts_event {
 	u16	x;
 	u16	y;
 	u16	z1, z2;
+#ifdef CONFIG_IMAP_PRODUCTION
+	u16     read_batt0, read_batt1, read_batt2, read_batt3;
+#endif
 	int	ignore;
 };
 
@@ -117,7 +192,9 @@ struct ads7846 {
 	u16			penirq_recheck_delay_usecs;
 
 	spinlock_t		lock;
+	spinlock_t		lock_imap;  //xmj
 	struct hrtimer		timer;
+	struct hrtimer		timer_imap;  //xmj
 	unsigned		pendown:1;	/* P: lock */
 	unsigned		pending:1;	/* P: lock */
 // FIXME remove "irq_disabled"
@@ -139,6 +216,54 @@ struct ads7846 {
 #define	CS_CHANGE(xfer)	((xfer).cs_change = 1)
 #else
 #define	CS_CHANGE(xfer)	((xfer).cs_change = 0)
+#endif
+#ifdef CONFIG_IMAP_PRODUCTION
+struct imap_addc_packet {
+	u8			read_z2, read_batt0, read_batt1, read_batt2, read_batt3, pwrdown;
+	u16			dummy;		/* for the pwrdown read */
+	struct ts_event		tc;
+};
+
+struct imap_addc {
+	char			phys[32];
+	char			name[32];
+
+	struct spi_device	*spi;
+	u16			model;
+	u16			vref_mv;
+	u16			vref_delay_usecs;
+	u16			x_plate_ohms;
+	u16			pressure_max;
+
+	bool			swap_xy;
+
+	struct imap_addc_packet	*packet;
+
+	struct spi_transfer	xfer[18];
+	struct spi_message	msg[5];
+	struct spi_message	*last_msg;
+	int			msg_idx;
+	int			read_cnt;
+	int			read_rep;
+	int			last_read;
+
+	u16			debounce_max;
+	u16			debounce_tol;
+	u16			debounce_rep;
+
+	u16			penirq_recheck_delay_usecs;
+
+	spinlock_t		lock;
+	spinlock_t		lock_imap;  //xmj
+	struct hrtimer		timer;
+	struct hrtimer		timer_imap;  //xmj
+	unsigned		pendown:1;	/* P: lock */
+	unsigned		pending:1;	/* P: lock */
+	unsigned		irq_disabled:1;	/* P: lock */
+	unsigned		disabled:1;
+	unsigned		is_suspended:1;
+	void			(*wait_for_sync)(void);
+};
 #endif
 
 /*--------------------------------------------------------------------------*/
@@ -173,7 +298,15 @@ struct ads7846 {
 
 #define	READ_Y(vref)	(READ_12BIT_DFR(y,  1, vref))
 #define	READ_Z1(vref)	(READ_12BIT_DFR(z1, 1, vref))
-#define	READ_Z2(vref)	(READ_12BIT_DFR(z2, 1, vref))
+#define	READ_Z2(vref)   (READ_12BIT_DFR(z2, 1, vref))
+#ifdef CONFIG_IMAP_PRODUCTION
+#define	READ_BATT0(vref)   0xa5	
+#define	READ_BATT1(vref)   0xa5	
+#define	READ_BATT2(vref)   0xa5	
+#define	READ_BATT3(vref)   0xa5	
+#define	READ_BATT4(vref)   0xa5	
+#endif
+//#define	READ_Z2(vref)   (READ_12BIT_SER(vbatt))	
 
 #define	READ_X(vref)	(READ_12BIT_DFR(x,  1, vref))
 #define	PWRDOWN		(READ_12BIT_DFR(y,  0, 0))	/* LAST */
@@ -207,6 +340,158 @@ struct ser_req {
 
 static void ads7846_enable(struct ads7846 *ts);
 static void ads7846_disable(struct ads7846 *ts);
+static int spi_irq_enable;
+#ifdef CONFIG_IMAP_PRODUCTION
+int battery_val;
+static int imap_sleep;
+EXPORT_SYMBOL(battery_val);
+#endif
+
+/*************************************************************************
+ *variance_calibrate used for ejecting the noise
+ */
+static int variance_calibrate(int x, int y, int pressure)
+{
+	int dist = 0;
+	variance.cur.x = x;
+	variance.cur.y = y;
+	variance.cur.pressure = pressure;
+
+	if (variance.cur.pressure == 0)
+	{
+		variance.flags &= ~(VAR_PENDOWN | VAR_NOISEVALID | VAR_LASTVALID);
+		return VAR_REPORT_NULL;
+	} 
+	else
+	{
+		variance.flags |= VAR_PENDOWN;
+	}
+
+	if (!(variance.flags & VAR_LASTVALID))
+	{
+		variance.last = variance.cur;
+		variance.flags |= VAR_LASTVALID;
+	}
+
+	if (variance.flags & VAR_PENDOWN) {
+		// Compute the distance between last sample and current
+		dist = sqr (variance.cur.x - variance.last.x) +
+			sqr (variance.cur.y - variance.last.y);
+
+		if (dist > variance.delta)
+		{
+			// Do we suspect the previous sample was a noise? 
+			if (variance.flags & VAR_NOISEVALID)
+			{
+				// Two "noises": it's just a quick pen movement
+				variance.flags &= ~VAR_NOISEVALID;
+				variance.last = variance.cur;
+				return VAR_REPORT_NOISE_LAST;
+			} 
+			else
+			{
+				variance.flags |= VAR_NOISEVALID;
+				// The pen jumped too far, maybe it's a noise ... 
+				variance.noise = variance.cur;
+				return VAR_REPORT_NULL;
+			}
+		} 
+		else
+		{
+			//if VAR_NOISEVALID been set,the noise should be ejected
+			if(variance.flags & VAR_NOISEVALID)
+			{
+				//printk("===========================>eject a noise signal!\n");
+				variance.flags &= ~VAR_NOISEVALID;
+			}
+			//reprot variance->last
+			variance.last = variance.cur;
+			return VAR_REPORT_LAST;
+		}
+	}
+	return VAR_REPORT_NULL;
+}
+/*
+ * variance_calibrate used for ejecting the noise END
+ **************************************************************************/
+
+/***************************************************************************
+ * dejitter_calibrate used for ejecting the jitter
+ */
+
+static void average (void)
+{
+	const unsigned char *w;
+	int sn = dejitter.head;
+	int i, x = 0, y = 0;
+	unsigned int p = 0;
+
+	w = weight [dejitter.nr - 2];
+
+	for (i = 0; i < dejitter.nr; i++) 
+	{
+		x += dejitter.hist [sn].x * w [i];
+		y += dejitter.hist [sn].y * w [i];
+		p += dejitter.hist [sn].p * w [i];
+		sn = (sn - 1) & (NR_SAMPHISTLEN - 1);
+	}
+
+	dejitter.cur.x = x >> w [NR_SAMPHISTLEN];
+	dejitter.cur.y = y >> w [NR_SAMPHISTLEN];
+	dejitter.cur.pressure = p >> w [NR_SAMPHISTLEN];
+}
+
+static int dejitter_calibrate(int x, int y, int pressure)
+{
+	if (pressure == 0)
+	{
+		/*
+		 * Pen was released. Reset the state and
+		 * forget all history events.
+		 */
+		dejitter.nr = 0;
+		return DEJ_REPORT_NULL;
+	}
+
+	/* If the pen moves too fast, reset the backlog. */
+	if (dejitter.nr)
+	{
+		int prev = (dejitter.head - 1) & (NR_SAMPHISTLEN - 1);
+		if (sqr (x - dejitter.hist[prev].x) + sqr (y - dejitter.hist[prev].y) > dejitter.delta)
+		{
+			//printk("DEJITTER: pen movement exceeds threshold\n");
+			dejitter.nr = 0;
+		}
+	}
+
+	dejitter.hist[dejitter.head].x = x;
+	dejitter.hist[dejitter.head].y = y;
+	dejitter.hist[dejitter.head].p = pressure;
+	if (dejitter.nr < NR_SAMPHISTLEN)
+		dejitter.nr++;
+
+	/* We'll pass through the very first sample since
+	 * we can't average it (no history yet).
+	 */
+	if (dejitter.nr == 1)
+	{
+		dejitter.cur.x = x;
+		dejitter.cur.y = y;
+		dejitter.cur.pressure = pressure;
+	}
+	else
+	{
+		average ();
+	}
+
+	dejitter.head = (dejitter.head + 1) & (NR_SAMPHISTLEN - 1);
+	return DEJ_REPORT_DATA;
+}
+
+/*
+ * dejitter_calibrate used for ejecting the jitter END
+ **************************************************************************/
+
 
 static int device_suspended(struct device *dev)
 {
@@ -534,7 +819,10 @@ static void ads7846_rx(void *ads)
 	struct ads7846_packet	*packet = ts->packet;
 	unsigned		Rt;
 	u16			x, y, z1, z2;
-
+	u16			x1, y1;
+	u16			ret_var;
+	u16			ret_dej;
+	u16			tmp;
 	/* ads7846_rx_val() did in-place conversion (including byteswap) from
 	 * on-the-wire format as part of debouncing to get stable readings.
 	 */
@@ -557,9 +845,12 @@ static void ads7846_rx(void *ads)
 		Rt *= ts->x_plate_ohms;
 		Rt /= z1;
 		Rt = (Rt + 2047) >> 12;
+		//Rt = Rt >> 12;
 	} else {
 		Rt = 0;
 	}
+
+//	printk(KERN_INFO">>>>>>>>>x:%d...y:%d...pressure:%d...z1:%d...z2:%d<<<<<<<<\n",y,x,Rt,z1,z2);
 
 	/* Sample found inconsistent by debouncing or pressure is beyond
 	 * the maximum. Don't report it to user space, repeat at least
@@ -605,18 +896,107 @@ static void ads7846_rx(void *ads)
 
 		if (ts->swap_xy)
 			swap(x, y);
+#ifdef CONFIG_FB_IMAP_LCD1024X600
+		tmp = x;
+		x = y;
+		y = tmp;
+		y= 4096 - y;
+#elif CONFIG_FB_IMAP_LCD800X600
+		x = 4096 - x;
+#endif
+		/********************************************************************
+		 * report the data filted by variance & dejitter
+		 */
+   		ret_var = variance_calibrate(x,y,Rt);
+		if(ret_var & VAR_REPORT_NOISE_LAST)
+		{
+			ret_dej = dejitter_calibrate(variance.noise.x,variance.noise.y,variance.noise.pressure);
+			if(ret_dej & DEJ_REPORT_DATA)
+			{
+				input_report_abs(input, ABS_X, dejitter.cur.x);
+				input_report_abs(input, ABS_Y, dejitter.cur.y);
+				input_report_abs(input, ABS_PRESSURE, dejitter.cur.pressure);
+				input_sync(input);
+			}
 
-		input_report_abs(input, ABS_X, x);
-		input_report_abs(input, ABS_Y, y);
-		input_report_abs(input, ABS_PRESSURE, Rt);
+			ret_dej = dejitter_calibrate(variance.last.x,variance.last.y,variance.last.pressure);
+			if(ret_dej & DEJ_REPORT_DATA)
+			{	
+				input_report_abs(input, ABS_X, dejitter.cur.x);
+				input_report_abs(input, ABS_Y, dejitter.cur.y);
+				input_report_abs(input, ABS_PRESSURE, dejitter.cur.pressure);
+				input_sync(input);
+			}
+		}
+		else if(ret_var & VAR_REPORT_LAST)
+		{
+			ret_dej = dejitter_calibrate(variance.last.x,variance.last.y,variance.last.pressure);
+			if(ret_dej & DEJ_REPORT_DATA)
+			{
+				input_report_abs(input, ABS_X, dejitter.cur.x);
+				input_report_abs(input, ABS_Y, dejitter.cur.y);
+				input_report_abs(input, ABS_PRESSURE, dejitter.cur.pressure);
+				input_sync(input);
+			}
+		}
+		/*
+		 *  report the data END
+		 *********************************************************************/
 
-		input_sync(input);
+		/**********************************************************************
+		 * report the data filted by the variance alone
+		 *
+		 ret_var = variance_calibrate(x,y,Rt);
+		 if(ret_var & VAR_REPORT_NOISE_LAST)
+		 {
+		 x1 = variance.noise.x;
+		 y1 = variance.noise.y;
+		 input_report_abs(input, ABS_X, x1);
+		 input_report_abs(input, ABS_Y, y1);
+		 input_report_abs(input, ABS_PRESSURE, variance.noise.pressure);
+		 input_sync(input);
+		 printk(KERN_INFO">>>>>>submit_noise..Xl:%d...Yl:%d<<<<<<\n", x1,y1);
+
+		 x1 = variance.last.x;
+		 y1 = variance.last.y;
+		 input_report_abs(input, ABS_X, x1);
+		 input_report_abs(input, ABS_Y, y1);
+		 input_report_abs(input, ABS_PRESSURE, variance.last.pressure);
+		 input_sync(input);
+		 printk(KERN_INFO">>>>>>Xl:%d...Yl:%d<<<<<<\n", x1,y1);
+		 }
+		 else if(ret_var & VAR_REPORT_LAST)
+		 {
+		 x1 = variance.last.x;
+		 y1 = variance.last.y;
+		 input_report_abs(input, ABS_X, x1);
+		 input_report_abs(input, ABS_Y, y1);
+		 input_report_abs(input, ABS_PRESSURE, variance.last.pressure);
+		 input_sync(input);
+		 printk(KERN_INFO">>>>>>Xl:%d...Yl:%d<<<<<<\n", x1,y1);
+		 }
+		 *
+		 * reprot the data filted by the variance alone end
+		 **************************************************************************/
+
+
+		/*************************************************************************
+		 * report the data calibrated alone
+		 input_report_abs(input, ABS_X, x);
+		 input_report_abs(input, ABS_Y, y);
+		 input_report_abs(input, ABS_PRESSURE, Rt);
+		 input_sync(input);
+
+		 printk(KERN_INFO">>>>>>Xt:%d...Yt:%d<<<<<<\n", x,y);
+		 *
+		 * reprot the data calibrated alone end
+		 ***************************************************************************/
 #ifdef VERBOSE
 		dev_dbg(&ts->spi->dev, "%4d/%4d/%4d\n", x, y, Rt);
 #endif
 	}
 
-	hrtimer_start(&ts->timer, ktime_set(0, TS_POLL_PERIOD),
+	hrtimer_start(&ts->timer, ktime_set(0, TS_POLL_PERIOD),\
 			HRTIMER_MODE_REL);
 }
 
@@ -679,7 +1059,6 @@ static void ads7846_rx_val(void *ads)
 	 * built from two 8 bit values written msb-first.
 	 */
 	val = be16_to_cpup((__be16 *)t->rx_buf) >> 3;
-
 	action = ts->filter(ts->filter_data, ts->msg_idx, &val);
 	switch (action) {
 	case ADS7846_FILTER_REPEAT:
@@ -705,29 +1084,141 @@ static void ads7846_rx_val(void *ads)
 		dev_err(&ts->spi->dev, "spi_async --> %d\n",
 				status);
 }
+/**********************************/
+#ifdef CONFIG_IMAP_PRODUCTION
+static void imap_addc_rx(void *ads)
+{
+	struct imap_addc		*ts = ads;
+	struct imap_addc_packet	*packet = ts->packet;
+	unsigned		Rt;
+	u16			read_batt0, read_batt1, read_batt2, z2, read_batt3;
+	unsigned int i;
+	unsigned int tmp;
+	/* imap_addc_rx_val() did in-place conversion (including byteswap) from
+	 * on-the-wire format as part of debouncing to get stable readings.
+	 */
+	z2 = packet->tc.z2;
+	read_batt0 = packet->tc.read_batt0;
+	read_batt1 = packet->tc.read_batt1;
+	read_batt2 = packet->tc.read_batt2;
+	read_batt3 = packet->tc.read_batt3;
+	battery_val = (z2 + read_batt0 + read_batt1 + read_batt2 + read_batt3) / 5;
+	//for(i=0;i<50;i++)
+	//	udelay(1000);
+	//tmp = __raw_readl(rINTMSK);
 
+	//__raw_writel(tmp & ~(1<<5), rINTMSK);	
+	hrtimer_start(&ts->timer, ktime_set(5, TS_POLL_PERIOD),\
+			HRTIMER_MODE_REL);
+}
+
+
+
+
+
+static void imap_addc_rx_val(void *ads)
+{
+	struct imap_addc *ts = ads;
+	struct imap_addc_packet *packet = ts->packet;
+	struct spi_message *m;
+	struct spi_transfer *t;
+	int val;
+	int action;
+	int status;
+
+	m = &ts->msg[ts->msg_idx];
+	t = list_entry(m->transfers.prev, struct spi_transfer, transfer_list);
+	/* adjust:  on-wire is a must-ignore bit, a BE12 value, then padding;
+	 * built from two 8 bit values written msb-first.
+	 */
+	val = be16_to_cpup((__be16 *)t->rx_buf) >> 3;
+		*(u16 *)t->rx_buf = val;
+		packet->tc.ignore = 0;
+		m = &ts->msg[++ts->msg_idx];
+
+	ts->wait_for_sync();
+	status = spi_async(ts->spi, m);
+	if (status)
+		dev_err(&ts->spi->dev, "spi_async --> %d\n",
+				status);
+
+}
+
+
+
+static enum hrtimer_restart imap_addc_timer(struct hrtimer *handle)
+{
+	struct imap_addc	*ts = container_of(handle, struct imap_addc, timer);
+	int		status = 0;
+	unsigned int tmp;
+	tmp = __raw_readl(rINTMSK);
+	//spin_lock(&ts->lock);
+		/* pen is still down, continue with the measurement */
+	if (imap_sleep == 0){
+
+	if ( ((__raw_readl(rGPGDAT) >>1)& 1)) {
+		__raw_writel(tmp | (1<<1), rINTMSK);	
+		ts->msg_idx = 0;
+		ts->wait_for_sync();
+		status = spi_async(ts->spi, &ts->msg[0]);
+		if (status)
+			dev_err(&ts->spi->dev, "spi_async --> %d\n", status);
+
+	__raw_writel(tmp & ~(1<<1), rINTMSK);	
+	} else {
+
+	printk(KERN_DEBUG"********pen is down!\n");
+	//spin_unlock(&ts->lock);
+	hrtimer_start(&ts->timer, ktime_set(10, TS_POLL_PERIOD),\
+			HRTIMER_MODE_REL);
+
+	//spin_lock(&ts->lock);
+	}
+	}else{
+		printk("&&&ts2046 is sleep!\n");
+	hrtimer_start(&ts->timer, ktime_set(10, TS_POLL_PERIOD),\
+			HRTIMER_MODE_REL);
+	}
+	//spin_unlock(&ts->lock);
+	return HRTIMER_NORESTART;
+}
+#endif
+
+/**********************************/
 static enum hrtimer_restart ads7846_timer(struct hrtimer *handle)
 {
 	struct ads7846	*ts = container_of(handle, struct ads7846, timer);
 	int		status = 0;
-
+	//printk("****** ads7846_timer!\n");
 	spin_lock(&ts->lock);
 
 	if (unlikely(!get_pendown_state(ts) ||
 		     device_suspended(&ts->spi->dev))) {
+
 		if (ts->pendown) {
 			struct input_dev *input = ts->input;
 
 			input_report_key(input, BTN_TOUCH, 0);
 			input_report_abs(input, ABS_PRESSURE, 0);
 			input_sync(input);
+			//touchscreen calibrate by zhaojun
+			//for variance
+			variance.flags &= ~(VAR_LASTVALID | VAR_NOISEVALID | VAR_PENDOWN);
+			variance.last.x = 0;
+			variance.last.y = 0;
+			variance.last.pressure = 0;
+			variance.noise = variance.last;
+			
+			//for dejitter
+			dejitter.nr = 0;
+			//touchscreen calibrate by zhaojun END
+
 
 			ts->pendown = 0;
 #ifdef VERBOSE
 			dev_dbg(&ts->spi->dev, "UP\n");
 #endif
 		}
-
 		/* measurement cycle ended */
 		if (!device_suspended(&ts->spi->dev)) {
 			ts->irq_disabled = 0;
@@ -743,6 +1234,8 @@ static enum hrtimer_restart ads7846_timer(struct hrtimer *handle)
 			dev_err(&ts->spi->dev, "spi_async --> %d\n", status);
 	}
 
+
+
 	spin_unlock(&ts->lock);
 	return HRTIMER_NORESTART;
 }
@@ -750,8 +1243,22 @@ static enum hrtimer_restart ads7846_timer(struct hrtimer *handle)
 static irqreturn_t ads7846_irq(int irq, void *handle)
 {
 	struct ads7846 *ts = handle;
-	unsigned long flags;
+	unsigned long flags, bitval, motor_dat;
 
+	int i;
+//	printk(KERN_INFO"[drivers/input/touchscreen/ads7846.c]:ads7846_irq\n");
+//	printk(KERN_DEBUG"<<<<<<<<<<<<<<<<<< EINT5 = %d >>>>>>>>>>>>>>>>>>>>\n", irq);
+
+	/*
+	bitval = (1UL << irq);
+	__raw_writel(bitval, rINTPND);
+	__raw_writel(bitval, rSRCPND);
+	*/
+
+//	for(i=0;i<50;i++)
+//		udelay(1000);
+	spi_irq_enable =1;	
+	printk(KERN_DEBUG"0x%x\n",((__raw_readl(rGPGDAT) >> 2) & 1));
 	spin_lock_irqsave(&ts->lock, flags);
 	if (likely(get_pendown_state(ts))) {
 		if (!ts->irq_disabled) {
@@ -763,7 +1270,7 @@ static irqreturn_t ads7846_irq(int irq, void *handle)
 			ts->irq_disabled = 1;
 			disable_irq_nosync(ts->spi->irq);
 			ts->pending = 1;
-			hrtimer_start(&ts->timer, ktime_set(0, TS_POLL_DELAY),
+			hrtimer_start(&ts->timer, ktime_set(0, TS_POLL_DELAY),\
 					HRTIMER_MODE_REL);
 		}
 	}
@@ -819,6 +1326,7 @@ static int ads7846_suspend(struct spi_device *spi, pm_message_t message)
 
 	spin_lock_irq(&ts->lock);
 
+	imap_sleep = 1;
 	ts->is_suspended = 1;
 	ads7846_disable(ts);
 
@@ -834,6 +1342,7 @@ static int ads7846_resume(struct spi_device *spi)
 
 	spin_lock_irq(&ts->lock);
 
+	imap_sleep=0;
 	ts->is_suspended = 0;
 	ads7846_enable(ts);
 
@@ -878,10 +1387,22 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 	struct ads7846_packet		*packet;
 	struct input_dev		*input_dev;
 	struct ads7846_platform_data	*pdata = spi->dev.platform_data;
+#ifdef CONFIG_IMAP_PRODUCTION
+	struct imap_addc_packet		*packet_imap;
+	struct imap_addc			*ts_imap;
+	struct spi_message		*m_imap;
+	struct spi_transfer		*x_imap;
+#endif
 	struct spi_message		*m;
 	struct spi_transfer		*x;
 	int				vref;
 	int				err;
+	int				status;
+
+	dejitter.head = 0;
+	dejitter.nr = 0;
+	dejitter.delta = 10000;
+	variance.delta = 900;
 
 	if (!spi->irq) {
 		dev_dbg(&spi->dev, "no IRQ?\n");
@@ -912,23 +1433,34 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 
 	ts = kzalloc(sizeof(struct ads7846), GFP_KERNEL);
 	packet = kzalloc(sizeof(struct ads7846_packet), GFP_KERNEL);
+#ifdef CONFIG_IMAP_PRODUCTION
+	ts_imap = kzalloc(sizeof(struct imap_addc), GFP_KERNEL);
+	packet_imap = kzalloc(sizeof(struct imap_addc_packet), GFP_KERNEL);
+#endif
 	input_dev = input_allocate_device();
 	if (!ts || !packet || !input_dev) {
 		err = -ENOMEM;
 		goto err_free_mem;
 	}
-
+	//printk("ts is %x, ts_imap is %x\n", ts, ts_imap);
 	dev_set_drvdata(&spi->dev, ts);
 
 	ts->packet = packet;
 	ts->spi = spi;
+#ifdef CONFIG_IMAP_PRODUCTION
+	ts_imap->packet = packet_imap;
+	ts_imap->spi = spi;
+#endif
 	ts->input = input_dev;
 	ts->vref_mv = pdata->vref_mv;
 	ts->swap_xy = pdata->swap_xy;
 
 	hrtimer_init(&ts->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	ts->timer.function = ads7846_timer;
-
+#ifdef CONFIG_IMAP_PRODUCTION
+	hrtimer_init(&ts_imap->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	ts_imap->timer.function = imap_addc_timer;
+#endif
 	spin_lock_init(&ts->lock);
 
 	ts->model = pdata->model ? : 7846;
@@ -964,7 +1496,9 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 				pdata->penirq_recheck_delay_usecs;
 
 	ts->wait_for_sync = pdata->wait_for_sync ? : null_wait_for_sync;
-
+#ifdef CONFIG_IMAP_PRODUCTION
+	ts_imap->wait_for_sync = null_wait_for_sync;
+#endif
 	snprintf(ts->phys, sizeof(ts->phys), "%s/input0", dev_name(&spi->dev));
 	snprintf(ts->name, sizeof(ts->name), "ADS%d Touchscreen", ts->model);
 
@@ -987,15 +1521,19 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 
 	vref = pdata->keep_vref_on;
 
+
+
+
+
 	/* set up the transfers to read touchscreen state; this assumes we
 	 * use formula #2 for pressure, not #3.
 	 */
+
 	m = &ts->msg[0];
 	x = ts->xfer;
 
 	spi_message_init(m);
 
-	/* y- still on; turn on only y+ (and ADC) */
 	packet->read_y = READ_Y(vref);
 	x->tx_buf = &packet->read_y;
 	x->len = 1;
@@ -1006,10 +1544,6 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 	x->len = 2;
 	spi_message_add_tail(x, m);
 
-	/* the first sample after switching drivers can be low quality;
-	 * optionally discard it, using a second one after the signals
-	 * have had enough time to stabilize.
-	 */
 	if (pdata->settle_delay_usecs) {
 		x->delay_usecs = pdata->settle_delay_usecs;
 
@@ -1030,7 +1564,6 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 	m++;
 	spi_message_init(m);
 
-	/* turn y- off, x+ on, then leave in lowpower */
 	x++;
 	packet->read_x = READ_X(vref);
 	x->tx_buf = &packet->read_x;
@@ -1042,7 +1575,6 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 	x->len = 2;
 	spi_message_add_tail(x, m);
 
-	/* ... maybe discard first sample ... */
 	if (pdata->settle_delay_usecs) {
 		x->delay_usecs = pdata->settle_delay_usecs;
 
@@ -1060,7 +1592,6 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 	m->complete = ads7846_rx_val;
 	m->context = ts;
 
-	/* turn y+ off, x- on; we'll use formula #2 */
 	if (ts->model == 7846) {
 		m++;
 		spi_message_init(m);
@@ -1076,7 +1607,6 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 		x->len = 2;
 		spi_message_add_tail(x, m);
 
-		/* ... maybe discard first sample ... */
 		if (pdata->settle_delay_usecs) {
 			x->delay_usecs = pdata->settle_delay_usecs;
 
@@ -1108,7 +1638,6 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 		x->len = 2;
 		spi_message_add_tail(x, m);
 
-		/* ... maybe discard first sample ... */
 		if (pdata->settle_delay_usecs) {
 			x->delay_usecs = pdata->settle_delay_usecs;
 
@@ -1127,7 +1656,6 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 		m->context = ts;
 	}
 
-	/* power down */
 	m++;
 	spi_message_init(m);
 
@@ -1147,20 +1675,19 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 	m->context = ts;
 
 	ts->last_msg = m;
-
-	if (request_irq(spi->irq, ads7846_irq, IRQF_TRIGGER_FALLING,
+	if (request_irq(spi->irq, ads7846_irq, IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING |IRQF_DISABLED,
 			spi->dev.driver->name, ts)) {
 		dev_info(&spi->dev,
 			"trying pin change workaround on irq %d\n", spi->irq);
 		err = request_irq(spi->irq, ads7846_irq,
-				  IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING,
+				  IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING | IRQF_DISABLED,
 				  spi->dev.driver->name, ts);
 		if (err) {
 			dev_dbg(&spi->dev, "irq %d busy?\n", spi->irq);
 			goto err_free_gpio;
 		}
 	}
-
+	
 	err = ads784x_hwmon_register(spi, ts);
 	if (err)
 		goto err_free_irq;
@@ -1170,7 +1697,7 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 	/* take a first sample, leaving nPENIRQ active and vREF off; avoid
 	 * the touchscreen, in case it's not connected.
 	 */
-	(void) ads7846_read12_ser(&spi->dev,
+	//(void) ads7846_read12_ser(&spi->dev,\
 			  READ_12BIT_SER(vaux) | ADS_PD10_ALL_ON);
 
 	err = sysfs_create_group(&spi->dev.kobj, &ads784x_attr_group);
@@ -1180,6 +1707,121 @@ static int __devinit ads7846_probe(struct spi_device *spi)
 	err = input_register_device(input_dev);
 	if (err)
 		goto err_remove_attr_group;
+/*******************************************************/
+#ifdef CONFIG_IMAP_PRODUCTION
+	m_imap = &ts_imap->msg[0];
+	x_imap = ts_imap->xfer;
+
+	spi_message_init(m_imap);
+
+	packet_imap->read_z2 = READ_BATT4(vref);
+	x_imap->tx_buf = &packet_imap->read_z2;
+	x_imap->len = 1;
+	spi_message_add_tail(x_imap, m_imap);
+
+	x_imap++;
+	x_imap->rx_buf = &packet_imap->tc.z2;
+	x_imap->len = 2;
+	spi_message_add_tail(x_imap, m_imap);
+	m_imap->complete = imap_addc_rx_val;
+	m_imap->context = ts_imap;
+
+
+	m_imap++;
+	spi_message_init(m_imap);
+
+	x_imap++;
+	packet_imap->read_batt0 = READ_BATT0(vref);
+	x_imap->tx_buf = &packet_imap->read_batt0;
+	x_imap->len = 1;
+	spi_message_add_tail(x_imap, m_imap);
+
+	x_imap++;
+	x_imap->rx_buf = &packet_imap->tc.read_batt0;
+	x_imap->len = 2;
+	spi_message_add_tail(x_imap, m_imap);
+	m_imap->complete = imap_addc_rx_val;
+	m_imap->context = ts_imap;
+
+	m_imap++;
+	spi_message_init(m_imap);
+
+	x_imap++;
+	packet_imap->read_batt1 = READ_BATT1(vref);
+	x_imap->tx_buf = &packet_imap->read_batt1;
+	x_imap->len = 1;
+	spi_message_add_tail(x_imap, m_imap);
+
+	x_imap++;
+	x_imap->rx_buf = &packet_imap->tc.read_batt1;
+	x_imap->len = 2;
+	spi_message_add_tail(x_imap, m_imap);
+	m_imap->complete = imap_addc_rx_val;
+	m_imap->context = ts_imap;
+
+	m_imap++;
+	spi_message_init(m_imap);
+
+	x_imap++;
+	packet_imap->read_batt2 = READ_BATT2(vref);
+	x_imap->tx_buf = &packet_imap->read_batt2;
+	x_imap->len = 1;
+	spi_message_add_tail(x_imap, m_imap);
+
+	x_imap++;
+	x_imap->rx_buf = &packet_imap->tc.read_batt2;
+	x_imap->len = 2;
+	spi_message_add_tail(x_imap, m_imap);
+	m_imap->complete = imap_addc_rx_val;
+	m_imap->context = ts_imap;
+
+	m_imap++;
+	spi_message_init(m_imap);
+
+	x_imap++;
+	packet_imap->read_batt3 = READ_BATT3(vref);
+	x_imap->tx_buf = &packet_imap->read_batt3;
+	x_imap->len = 1;
+	spi_message_add_tail(x_imap, m_imap);
+
+	x_imap++;
+	x_imap->rx_buf = &packet_imap->tc.read_batt3;
+	x_imap->len = 2;
+	spi_message_add_tail(x_imap, m_imap);
+	m_imap->complete = imap_addc_rx_val;
+	m_imap->context = ts_imap;
+
+
+
+	m_imap++;
+	spi_message_init(m_imap);
+
+	x_imap++;
+
+	packet_imap->pwrdown = PWRDOWN;
+	x_imap->tx_buf = &packet_imap->pwrdown;
+	x_imap->len = 1;
+	spi_message_add_tail(x_imap, m_imap);
+
+	x_imap++;
+	x_imap->rx_buf = &packet_imap->dummy;
+	x_imap->len = 2;
+	//CS_CHANGE(*x_imap);
+	spi_message_add_tail(x_imap, m_imap);
+
+	m_imap->complete = imap_addc_rx;
+	m_imap->context = ts_imap;
+
+	ts_imap->last_msg = m_imap;
+
+	ts_imap->msg_idx = 0;
+	ts_imap->wait_for_sync();
+	status = spi_async(ts_imap->spi, &ts_imap->msg[0]);
+	if (status)
+		dev_err(&ts_imap->spi->dev, "spi_async --> %d\n", status);
+#endif
+
+/*******************************************************/
 
 	return 0;
 

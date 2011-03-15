@@ -51,6 +51,10 @@ void asmlinkage __attribute__((weak)) early_printk(const char *fmt, ...)
 
 #define __LOG_BUF_LEN	(1 << CONFIG_LOG_BUF_SHIFT)
 
+#ifdef        CONFIG_DEBUG_LL
+extern void printascii(char *);
+#endif
+
 /* printk's without a loglevel use this.. */
 #define DEFAULT_MESSAGE_LOGLEVEL 4 /* KERN_WARNING */
 
@@ -144,6 +148,17 @@ static char *log_buf = __log_buf;
 static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
 
+#ifdef CONFIG_PANIC_DUMP
+char **kpanic_log_buf = &log_buf;
+int *kpanic_log_buf_len = & log_buf_len;
+unsigned *kpanic_logged_chars = & logged_chars;
+unsigned *kpanic_log_end = & log_end;
+EXPORT_SYMBOL(kpanic_log_buf);
+EXPORT_SYMBOL(kpanic_log_buf_len);
+EXPORT_SYMBOL(kpanic_logged_chars);
+EXPORT_SYMBOL(kpanic_log_end);
+
+#endif
 #ifdef CONFIG_KEXEC
 /*
  * This appends the listed symbols to /proc/vmcoreinfo
@@ -255,6 +270,53 @@ static inline void boot_delay_msec(void)
 {
 }
 #endif
+
+/*
+ * Return the number of unread characters in the log buffer.
+ */
+static int log_buf_get_len(void)
+{
+	return logged_chars;
+}
+
+/*
+ * Clears the ring-buffer
+ */
+void log_buf_clear(void)
+{
+	logged_chars = 0;
+}
+
+/*
+ * Copy a range of characters from the log buffer.
+ */
+int log_buf_copy(char *dest, int idx, int len)
+{
+	int ret, max;
+	bool took_lock = false;
+
+	if (!oops_in_progress) {
+		spin_lock_irq(&logbuf_lock);
+		took_lock = true;
+	}
+
+	max = log_buf_get_len();
+	if (idx < 0 || idx >= max) {
+		ret = -1;
+	} else {
+		if (len > max - idx)
+			len = max - idx;
+		ret = len;
+		idx += (log_end - max);
+		while (len-- > 0)
+			dest[len] = LOG_BUF(idx + len);
+	}
+
+	if (took_lock)
+		spin_unlock_irq(&logbuf_lock);
+
+	return ret;
+}
 
 /*
  * Commands to do_syslog:
@@ -714,6 +776,9 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
 
+#ifdef	CONFIG_DEBUG_LL
+	printascii(printk_buf);
+#endif
 
 	p = printk_buf;
 

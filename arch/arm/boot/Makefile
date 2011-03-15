@@ -57,6 +57,7 @@ $(obj)/zImage:	$(obj)/compressed/vmlinux FORCE
 	$(call if_changed,objcopy)
 	@echo '  Kernel: $@ is ready'
 
+#	cp -f arch/arm/boot/zImage /home/zhjun/ubuntu_rootfs
 endif
 
 quiet_cmd_uimage = UIMAGE  $@
@@ -80,6 +81,8 @@ endif
 $(obj)/uImage:	$(obj)/zImage FORCE
 	$(call if_changed,uimage)
 	@echo '  Image $@ is ready'
+	
+#	cp -f arch/arm/boot/uImage /home/zhjun/ubuntu_rootfs
 
 $(obj)/bootp/bootp: $(obj)/zImage initrd FORCE
 	$(Q)$(MAKE) $(build)=$(obj)/bootp $@

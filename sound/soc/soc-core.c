@@ -861,7 +861,6 @@ static void snd_soc_instantiate_card(struct snd_soc_card *card)
 			card->platform->name);
 		return;
 	}
-
 	ac97 = 0;
 	for (i = 0; i < card->num_links; i++) {
 		found = 0;
@@ -870,12 +869,13 @@ static void snd_soc_instantiate_card(struct snd_soc_card *card)
 				found = 1;
 				break;
 			}
+/*
 		if (!found) {
 			dev_dbg(card->dev, "DAI %s not registered\n",
 				card->dai_link[i].cpu_dai->name);
 			return;
 		}
-
+*/
 		if (card->dai_link[i].cpu_dai->ac97_control)
 			ac97 = 1;
 	}
@@ -899,11 +899,13 @@ static void snd_soc_instantiate_card(struct snd_soc_card *card)
 					found = 1;
 					break;
 				}
+/*
 			if (!found) {
 				dev_dbg(card->dev, "DAI %s not registered\n",
 					card->dai_link[i].codec_dai->name);
 				return;
 			}
+*/
 		}
 
 	/* Note that we do not current check for codec components */

@@ -169,7 +169,7 @@ machine-$(CONFIG_ARCH_U300)		:= u300
 machine-$(CONFIG_ARCH_VERSATILE)	:= versatile
 machine-$(CONFIG_ARCH_W90X900)		:= w90x900
 machine-$(CONFIG_FOOTBRIDGE)		:= footbridge
-machine-$(CONFIG_ARCH_MXC91231)		:= mxc91231
+machine-$(CONFIG_ARCH_IMAP)       	:= imapx200
 
 # Platform directory name.  This list is sorted alphanumerically
 # by CONFIG_* macro name.
@@ -182,6 +182,7 @@ plat-$(CONFIG_PLAT_S3C24XX)	:= s3c24xx s3c
 plat-$(CONFIG_PLAT_S3C64XX)	:= s3c64xx s3c
 plat-$(CONFIG_PLAT_S5PC1XX)	:= s5pc1xx s3c
 plat-$(CONFIG_ARCH_STMP3XXX)	:= stmp3xxx
+plat-$(CONFIG_PLAT_IMAP)      	:= imap
 
 ifeq ($(CONFIG_ARCH_EBSA110),y)
 # This is what happens if you forget the IOCS16 line.
@@ -232,7 +233,7 @@ libs-y				:= arch/arm/lib/ $(libs-y)
 ifeq ($(CONFIG_XIP_KERNEL),y)
 KBUILD_IMAGE := xipImage
 else
-KBUILD_IMAGE := zImage
+KBUILD_IMAGE := uImage
 endif
 
 all:	$(KBUILD_IMAGE)

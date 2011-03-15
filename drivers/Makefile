@@ -6,6 +6,7 @@
 #
 
 obj-y				+= gpio/
+obj-$(CONFIG_SENSOR)		+= sensors/
 obj-$(CONFIG_PCI)		+= pci/
 obj-$(CONFIG_PARISC)		+= parisc/
 obj-$(CONFIG_RAPIDIO)		+= rapidio/
@@ -95,6 +96,7 @@ obj-y				+= idle/
 obj-$(CONFIG_MMC)		+= mmc/
 obj-$(CONFIG_MEMSTICK)		+= memstick/
 obj-$(CONFIG_NEW_LEDS)		+= leds/
+obj-$(CONFIG_SWITCH)		+= switch/
 obj-$(CONFIG_INFINIBAND)	+= infiniband/
 obj-$(CONFIG_SGI_SN)		+= sn/
 obj-y				+= firmware/
@@ -111,3 +113,8 @@ obj-$(CONFIG_VLYNQ)		+= vlynq/
 obj-$(CONFIG_STAGING)		+= staging/
 obj-y				+= platform/
 obj-y				+= ieee802154/
+obj-$(CONFIG_IMAP_MEMALLOC)     += memalloc/
+obj-$(CONFIG_ASYSOPS)		+= asysops/
+
+# add by warits
+obj-$(CONFIG_IX_DSP_CLASS)	+= ixdsp/

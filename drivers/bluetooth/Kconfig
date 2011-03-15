@@ -195,5 +195,17 @@ config BT_MRVL_SDIO
 	  Say Y here to compile support for Marvell BT-over-SDIO driver
 	  into the kernel or say M to compile it as module.
 
+config BT_RDA5868_UART
+	tristate "RDA5868 UART driver"
+	help
+	  The driver for RDA5868 Bluetooth chipsets with UART interface.
+
+	  This driver is required if you want to use RDA Bluetooth
+	  devices with UART interface. Currently only RDA5868 chipset is
+	  supported.
+
+	  Say Y here to compile support for RDA5868 UART driver
+	  into the kernel or say M to compile it as module.
+
 endmenu
 

@@ -499,6 +499,12 @@ config I2C_S3C2410
 	help
 	  Say Y here to include support for I2C controller in the
 	  Samsung S3C2410 based System-on-Chip devices.
+config I2C_IMAPX200
+	tristate "IMAPx200 I2C Driver"
+	depends on ARCH_IMAP 
+	help
+	  Say Y here to include support for I2C controller in the
+	  IMAPX200 based System-on-Chip devices.
 
 config I2C_S6000
 	tristate "S6000 I2C support"

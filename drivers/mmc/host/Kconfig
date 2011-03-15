@@ -94,9 +94,9 @@ config MMC_SDHCI_PLTFM
 
 	  If unsure, say N.
 
-config MMC_SDHCI_S3C
-	tristate "SDHCI support on Samsung S3C SoC"
-	depends on MMC_SDHCI && (PLAT_S3C24XX || PLAT_S3C64XX)
+config MMC_SDHCI_IMAP
+	tristate "iMAP sdhci host controller channel 0"
+	depends on MMC_SDHCI 
 	help
 	  This selects the Secure Digital Host Controller Interface (SDHCI)
 	  often referrered to as the HSMMC block in some of the Samsung S3C
@@ -108,16 +108,52 @@ config MMC_SDHCI_S3C
 	  If you have a controller with this interface, say Y or M here.
 
 	  If unsure, say N.
-
-config MMC_SDHCI_S3C_DMA
-	bool "DMA support on S3C SDHCI"
-	depends on MMC_SDHCI_S3C && EXPERIMENTAL
+config  SDI0_USE_EPLL_CLOCK
+	bool "sdi0 EPLL clock select"
+	depends on MMC_SDHCI_IMAP
 	help
-	  Enable DMA support on the Samsung S3C SDHCI glue. The DMA
+	  This selects the sdio0 clock sources.YES means EPLL clock at a frequency of 96MHZ
+	  No means AHB clock at a frenquency of 133MHZ 
+	  Note:some card can not work on HCLK,We strongly suggest EPLL clock!
+
+config	MMC_SDHCI_IMAP1
+	tristate "iMAP sdhci host controller channel 1"
+	depends on MMC_SDHCI
+
+config  SDI1_USE_EPLL_CLOCK
+	bool "sdi1 EPLL clock select"
+	depends on MMC_SDHCI_IMAP1
+	help
+	   This selects the sdio1 clock sources.YES means EPLL clock at a frequency of 96MHZ
+	   No means AHB clock at a frenquency of 133MHZ 
+	   Note:some card can not work on HCLK,We strongly suggest EPLL clock!
+
+config	MMC_SDHCI_IMAP2
+	tristate "iMAP sdhci host controller channel 2"
+	depends on MMC_SDHCI
+
+config  SDI2_USE_EPLL_CLOCK
+	bool "sdi2 EPLL clock select"
+	depends on MMC_SDHCI_IMAP2
+	help
+	   This selects the sdio2 clock sources.YES means EPLL clock at a frequency of 96MHZ
+	   No means AHB clock at a frenquency of 133MHZ 
+	   Note:some card can not work on HCLK,We strongly suggest EPLL clock!
+
+config MMC_SDHCI_IMAP_SDMA
+	bool "SDMA support on iMAP SDHCI"
+	depends on MMC_SDHCI && EXPERIMENTAL
+	help
+	  Enable DMA support on the infoTM iMAPX200 SDHCI glue. The DMA
 	  has proved to be problematic if the controller encounters
 	  certain errors, and thus should be treated with care.
 
 	  YMMV.
+config	MMC_SDHCI_IMAP_ADMA
+	bool  "ADMA support on iMAP SDHCI"
+	depends on MMC_SDHCI_IMAP_SDMA
+	help
+		Eable ADMA2 support on infoTM IMAPX200 SOC
 
 config MMC_OMAP
 	tristate "TI OMAP Multimedia Card Interface support"

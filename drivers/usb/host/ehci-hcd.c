@@ -1102,6 +1102,11 @@ MODULE_LICENSE ("GPL");
 #define	PCI_DRIVER		ehci_pci_driver
 #endif
 
+#ifdef CONFIG_ARCH_IMAP
+#include "ehci-imap.c"
+#define PLATFORM_DRIVER ehci_imapx200_driver
+#endif
+
 #ifdef CONFIG_USB_EHCI_FSL
 #include "ehci-fsl.c"
 #define	PLATFORM_DRIVER		ehci_fsl_driver
