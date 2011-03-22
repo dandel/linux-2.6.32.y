@@ -1029,6 +1029,7 @@ int smb380_read_accel_xyz(smb380acc_t * acc)
 {
 	int comres;
 	unsigned char data[6];
+        short tmp_axis;
 
 
 	if (p_smb380==0)
@@ -1050,6 +1051,10 @@ int smb380_read_accel_xyz(smb380acc_t * acc)
 	acc->z = acc->z << (sizeof(short)*8-(SMB380_ACC_Z_LSB__LEN+SMB380_ACC_Z_MSB__LEN));
 	acc->z = acc->z >> (sizeof(short)*8-(SMB380_ACC_Z_LSB__LEN+SMB380_ACC_Z_MSB__LEN));
 	
+        /* swap x and y as the sensor's not correctly mounted */
+        tmp_axis = acc->x;
+        acc->x = acc->y;
+        acc->y = -tmp_axis;
 	return comres;
 	
 }
